@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import csv
 from datetime import datetime, timedelta
@@ -18,7 +20,7 @@ OUTPUT_DATE_FORMAT = '%Y-%m-%d'
 # ====
 def auth_header(token):
     """Auth header object for Density API"""
-    return {'Authorization': 'Bearer {}'.format(token)}
+    return {'Authorization': f'Bearer {token}'}
 
 
 def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', paginate_next=None, order='ASC'):
@@ -65,7 +67,7 @@ def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', p
     return response['results']
 
 
-def pull_spaces(token, tag=''):
+def pull_spaces(token, tag='', space_type='space'):
     """Convenience method to hit the spaces endpoint.
 
     Args:
@@ -73,17 +75,19 @@ def pull_spaces(token, tag=''):
 
     Kwargs:
         tag: space tag filter
+        space_type: only return this space type
+                    (space, floor, building, campus)
 
     Returns:
         [{...}] Spaces array
     """
-    params = {}
-
-    if len(tag) > 0:
-        params['tag'] = tag
+    params = {
+        'tag': tag if tag else None,
+        'space_type': space_type if space_type else None,
+    }
 
     request = requests.get(
-        '{}/spaces/'.format(API_ROOT),
+        f'{API_ROOT}/spaces/',
         params=params,
         headers=auth_header(token)
     )
@@ -208,7 +212,7 @@ def pull_counts_for_time_ranges(token, space_id, time_ranges):
     """Pulls count buckets from the density API given a space and set of DST safe
     time ranges.
     """
-    counts_array = []
+    all_counts = []
 
     for subrange in time_ranges:
         counts = get_counts(
@@ -221,7 +225,7 @@ def pull_counts_for_time_ranges(token, space_id, time_ranges):
 
         if subrange['gap'] and len(counts) > 0:
             gap_interval= counts[0]['interval']
-            last_interval = counts_array[-1]['interval']
+            last_interval = all_counts[-1]['interval']
 
             last_interval['analytics']['entrances'] += gap_interval['analytics']['entrances']
             last_interval['analytics']['exits'] += gap_interval['analytics']['exits']
@@ -230,9 +234,9 @@ def pull_counts_for_time_ranges(token, space_id, time_ranges):
             last_interval['analytics']['min'] = min(gap_interval['analytics']['min'], last_interval['analytics']['min'])
             last_interval['end'] = gap_interval['end']
         else:
-            counts_array.extend(counts)
+            all_counts += counts
 
-    return counts_array
+    return all_counts
 
 
 def calculate_monthly_peaks(counts, time_zone):
@@ -257,6 +261,16 @@ def pull_space_counts(token, spaces, start, end):
         space_id = space['id']
         space_name = space['name']
         time_zone = space['time_zone']
+        created_at = parser.parse(space['created_at'])
+
+        if created_at > end.replace(tzinfo=pytz.utc):
+            print(f'Skiping {space_name} because it was created too recently ({created_at})')
+            space['counts'] = []
+            continue
+
+        # The space was created during the requested period
+        if created_at > start.replace(tzinfo=pytz.utc):
+            start = created_at.replace(tzinfo=None)
 
         time_ranges = split_time_range_into_subranges_with_same_offset(
             time_zone=time_zone,
@@ -309,31 +323,31 @@ def write_peaks_to_csv(spaces, start, end, peak_type, tag):
     outfile.close()
 
 
-def main():
-    # ====
-    # parse args
-    # ====
-    arg_parser = argparse.ArgumentParser('Density Peaks CSV Export')
+def parse_args():
+    arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument(
         '-s', '--start-date',
         type=parser.parse,
+        required=True,
         help='Start date (local) of peaks query: YYYY-MM-DD'
     )
     arg_parser.add_argument(
         '-e', '--end-date',
         type=parser.parse,
-        help='End date (local) of peaks query. Format: YYYY-MM-DD'
+        required=True,
+        help='End date (local) of peaks query. Format: YYYY-MM-DD'        
+    )
+    arg_parser.add_argument(
+        '-t', '--token',
+        type=str,
+        required=True,
+        help='Density API token (read-only preferred)'
     )
     arg_parser.add_argument(
         '-p', '--peak-type',
         type=str,
         default='DAILY',
         help='Peak type (DAILY or MONTHLY)'
-    )
-    arg_parser.add_argument(
-        '-t', '--token',
-        type=str,
-        help='Density token (read-only preferred)'
     )
     arg_parser.add_argument(
         '--tag',
@@ -347,31 +361,29 @@ def main():
     # ensure range is inclusive of last date (evaluated at midnight)
     args.end_date += timedelta(days=1)
 
-    # ====
-    # validate args
-    # ====
-    if (args.start_date >= args.end_date):
-      raise ValueError('Start date must be before end date!')
+    # validation / sanity checks
+    if args.start_date >= args.end_date:
+        raise ValueError('Start date must be before end date!')
 
     if args.peak_type not in ['DAILY', 'MONTHLY']:
         raise ValueError('Peak type must be DAILY or MONTHLY')
 
-    if args.peak_type == 'MONTHLY' and\
+    if args.peak_type == 'MONTHLY' and \
         (args.end_date - args.start_date < timedelta(days=28)):
         print('==! Warning: You are querying under a month of data while using the MONTHLY peak type! ==\n\n')
 
-    # ====
-    # CSV creation pipeline
-    # ====
+    return args
+
+def create_csv(parsed_args):
     # pull the list of spaces, optionally filtering by tag
-    spaces = pull_spaces(args.token, tag=args.tag)
+    spaces = pull_spaces(parsed_args.token, tag=parsed_args.tag)
 
     # pull the counts for the time range, and attach them to the space objects
-    pull_space_counts(args.token, spaces, args.start_date, args.end_date)
+    pull_space_counts(parsed_args.token, spaces, parsed_args.start_date, parsed_args.end_date)
 
     # populate and save CSV data
-    write_peaks_to_csv(spaces, args.start_date, args.end_date, args.peak_type, args.tag)
+    write_peaks_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag)
 
 
 if __name__ == '__main__':
-    main()
+    create_csv(parse_args())
