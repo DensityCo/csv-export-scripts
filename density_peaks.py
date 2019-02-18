@@ -61,7 +61,7 @@ def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', p
     response = request.json()
 
     if response['next'] is not None:
-        response['results'].extend(get_events(
+        response['results'].extend(get_counts(
             token, space_id, paginate_next=response['next']))
 
     return response['results']
