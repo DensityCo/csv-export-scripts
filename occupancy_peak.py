@@ -67,7 +67,7 @@ def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', p
     return response['results']
 
 
-def pull_spaces(token, tag='', space_type='space'):
+def pull_spaces(token, tag='', space_type=''):
     """Convenience method to hit the spaces endpoint.
 
     Args:
@@ -285,17 +285,34 @@ def pull_space_counts(token, spaces, start, end):
         space['counts'] = counts
 
 
-def write_peaks_to_csv(spaces, start, end, peak_type, tag):
+def summarize_count_data(counts):
+    """Given a set of count buckets and a local time zone, create summary data"""
+    peaks = []
+    space_summary = {
+        'peak': None,
+        'avg_peak': None
+    }
+
+    for count in counts:
+        peaks.append(count['interval']['analytics']['max'])
+
+    space_summary['peak'] = max(peaks)
+    space_summary['avg_peak'] = round(sum(peaks) / len(peaks))
+
+    return space_summary
+
+
+def write_detailed_data_to_csv(spaces, start, end, peak_type, tag):
     """Given spaces w/ populated counts buckets, generate a CSV file"""
-    file_name = 'density_{}_peaks{}_{}-{}.csv'.format(
+    file_name = 'density_{}_occupancy{}_{}-{}.csv'.format(
         peak_type.lower(),
         f'_{tag}' if len(tag) > 0 else '',
         start.strftime(OUTPUT_DATE_FORMAT),
         end.strftime(OUTPUT_DATE_FORMAT)
     )
 
-    field_names = ['Space', 'Date', 'Peak Count'] if peak_type == 'DAILY'\
-        else ['Space', 'Month', 'Peak Count']
+    field_names = ['Space', 'Date', 'Target Capacity', 'Peak Occupancy'] if peak_type == 'DAILY'\
+        else ['Space', 'Month', 'Target Capacity', 'Peak Occupancy']
 
     outfile = open(file_name, 'w', newline='')
 
@@ -310,15 +327,62 @@ def write_peaks_to_csv(spaces, start, end, peak_type, tag):
                 writer.writerow({
                     'Space': space['name'],
                     'Date': timestamp_to_local(count['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
-                    'Peak Count': count['interval']['analytics']['max']
+                    'Target Capacity': space['target_capacity'],
+                    'Peak Occupancy': count['interval']['analytics']['max'],
                 })
         else:
             for peak in calculate_monthly_peaks(space['counts'], time_zone):
                 writer.writerow({
                     'Space': space['name'],
                     'Month': peak['Month'],
-                    'Peak Count': peak['Peak Count']
+                    'Target Capacity': space['target_capacity'],
+                    'Peak Occupancy': peak['Peak Count'],
                 })
+
+    outfile.close()
+
+
+def write_summary_data_to_csv(spaces, start, end, peak_type, tag):
+    """Given spaces w/ populated counts buckets, generate a CSV file"""
+    file_name = 'density_{}_occupancy_summary{}_{}-{}.csv'.format(
+        peak_type.lower(),
+        f'_{tag}' if len(tag) > 0 else '',
+        start.strftime(OUTPUT_DATE_FORMAT),
+        end.strftime(OUTPUT_DATE_FORMAT)
+    )
+
+    field_names = ['Space', 'Date Range', 'Target Capacity', 'Interval', 'Peak Occupancy' 'Avg Peak Occupancy'] if peak_type == 'DAILY'\
+        else ['Space', 'Date Range', 'Target Capacity', 'Interval', 'Peak Occupancy' 'Avg Peak Occupancy']
+
+    outfile = open(file_name, 'w', newline='')
+
+    writer = csv.DictWriter(outfile, fieldnames=field_names)
+    writer.writeheader()
+
+    for space in spaces:
+        time_zone = space['time_zone']
+
+        space_summary = summarize_count_data(space['counts'])
+        print(space_summary)
+
+        if peak_type == 'DAILY':
+            writer.writerow({
+                'Space': space['name'],
+                'Date Range': timestamp_to_local(space['counts'][0]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
+                'Target Capacity': space['target_capacity'],
+                'Interval': 'Daily',
+                'Peak Occupancy': space_summary['peak'],
+                'Avg Peak Occupancy': space_summary['avg_peak'],
+            })
+        else:
+            writer.writerow({
+                'Space': space['name'],
+                'Date Range': timestamp_to_local(space['counts'][0]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
+                'Target Capacity': space['target_capacity'],
+                'Interval': 'Monthly',
+                'Peak Occupancy': space_summary['peak'],
+                'Avg Peak Occupancy': space_summary['avg_peak'],
+            })
 
     outfile.close()
 
@@ -382,7 +446,8 @@ def create_csv(parsed_args):
     pull_space_counts(parsed_args.token, spaces, parsed_args.start_date, parsed_args.end_date)
 
     # populate and save CSV data
-    write_peaks_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag)
+    # write_detailed_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag)
+    write_summary_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag)
 
 
 if __name__ == '__main__':
