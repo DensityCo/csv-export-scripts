@@ -45,6 +45,7 @@ def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', p
         params = {
             'start_time': start_time.isoformat(),
             'end_time': end_time.isoformat(),
+            'time_segment_label': time_segment_label,
             'order': 'ASC',
             'interval': interval,
             'page_size': 5000,
@@ -454,7 +455,7 @@ def create_csv(parsed_args):
     pull_space_counts(parsed_args.token, spaces, parsed_args.start_date, parsed_args.end_date)
 
     # populate and save CSV data
-    # write_detailed_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag)
+    write_detailed_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag)
     write_summary_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag)
 
 
