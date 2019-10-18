@@ -285,14 +285,15 @@ def pull_space_counts(token, spaces, start, end):
         counts = pull_counts_for_time_ranges(token, space_id, time_ranges)
 
         space['counts'] = counts
+        print(space['counts'])
 
 
 def summarize_count_data(counts):
     """Given a set of count buckets and a local time zone, create summary data"""
     peaks = []
     space_summary = {
-        'peak': None,
-        'avg_peak': None
+        'peak': 0,
+        'avg_peak': 0
     }
 
     for count in counts:
