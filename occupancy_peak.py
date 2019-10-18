@@ -23,7 +23,7 @@ def auth_header(token):
     return {'Authorization': f'Bearer {token}'}
 
 
-def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', paginate_next=None, order='ASC'):
+def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', paginate_next=None, order='ASC', time_segment_label=None):
     """Convenience method to hit the space events endpoint. Will act recursively if
     data is paginated.
 
@@ -35,6 +35,7 @@ def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', p
         start_time: UTC datetime for beginning of query
         end_time: UTC datetime for end of query
         paginate_next: URL for next pagination (will override setting initial params in request)
+        time_segment_label: Label for scoping data to a times of day and days of week
 
     Returns:
         [{...}] Counts array
@@ -208,7 +209,7 @@ def split_time_range_into_subranges_with_same_offset(time_zone, start, end, para
     # Return array of subranges
     return results
 
-def pull_counts_for_time_ranges(token, space_id, time_ranges):
+def pull_counts_for_time_ranges(token, space_id, time_ranges, time_segment_label):
     """Pulls count buckets from the density API given a space and set of DST safe
     time ranges.
     """
@@ -218,9 +219,10 @@ def pull_counts_for_time_ranges(token, space_id, time_ranges):
         counts = get_counts(
             token,
             space_id,
+            time_segment_label,
             start_time=subrange['start'],
             end_time=subrange['end'],
-            interval='1d'
+            interval='1d',
         )
 
         if subrange['gap'] and len(counts) > 0:
@@ -255,7 +257,7 @@ def calculate_monthly_peaks(counts, time_zone):
     return peaks
 
 
-def pull_space_counts(token, spaces, start, end):
+def pull_space_counts(token, spaces, start, end, time_segment_label):
     """Pull and store count buckets on the space dict"""
     for space in spaces:
         space_id = space['id']
@@ -279,8 +281,8 @@ def pull_space_counts(token, spaces, start, end):
             params={'interval': '1d'}
         )
 
-        print(f'Pulling counts for space: {space_name} from {start} to {end}')
-        counts = pull_counts_for_time_ranges(token, space_id, time_ranges)
+        print(f'Pulling counts for space: {space_name} from {start} to {end} during {time_segment_label}')
+        counts = pull_counts_for_time_ranges(token, space_id, time_ranges, time_segment_label)
 
         space['counts'] = counts
 
@@ -351,8 +353,8 @@ def write_summary_data_to_csv(spaces, start, end, peak_type, tag):
         end.strftime(OUTPUT_DATE_FORMAT)
     )
 
-    field_names = ['Space', 'Date Range', 'Target Capacity', 'Interval', 'Peak Occupancy' 'Avg Peak Occupancy'] if peak_type == 'DAILY'\
-        else ['Space', 'Date Range', 'Target Capacity', 'Interval', 'Peak Occupancy' 'Avg Peak Occupancy']
+    field_names = ['Space', 'Start Date', 'End Date', 'Target Capacity', 'Interval', 'Peak Occupancy', 'Avg Peak Occupancy'] if peak_type == 'DAILY'\
+        else ['Space', 'Start Date', 'End Date', 'Target Capacity', 'Interval', 'Peak Occupancy', 'Avg Peak Occupancy']
 
     outfile = open(file_name, 'w', newline='')
 
@@ -368,7 +370,8 @@ def write_summary_data_to_csv(spaces, start, end, peak_type, tag):
         if peak_type == 'DAILY':
             writer.writerow({
                 'Space': space['name'],
-                'Date Range': timestamp_to_local(space['counts'][0]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
+                'Start Date': timestamp_to_local(space['counts'][0]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
+                'End Date': timestamp_to_local(space['counts'][-1]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
                 'Target Capacity': space['target_capacity'],
                 'Interval': 'Daily',
                 'Peak Occupancy': space_summary['peak'],
@@ -377,7 +380,8 @@ def write_summary_data_to_csv(spaces, start, end, peak_type, tag):
         else:
             writer.writerow({
                 'Space': space['name'],
-                'Date Range': timestamp_to_local(space['counts'][0]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
+                'Start Date': timestamp_to_local(space['counts'][0]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
+                'End Date': timestamp_to_local(space['counts'][-1]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
                 'Target Capacity': space['target_capacity'],
                 'Interval': 'Monthly',
                 'Peak Occupancy': space_summary['peak'],
@@ -419,6 +423,12 @@ def parse_args():
         default='',
         help='Filter Density spaces by tag name'
     )
+    arg_parser.add_argument(
+        '--time_segment_label',
+        type=str,
+        default='',
+        help='Filter count data by a time segement label'
+    )
 
     args = arg_parser.parse_args()
 
@@ -443,7 +453,7 @@ def create_csv(parsed_args):
     spaces = pull_spaces(parsed_args.token, tag=parsed_args.tag)
 
     # pull the counts for the time range, and attach them to the space objects
-    pull_space_counts(parsed_args.token, spaces, parsed_args.start_date, parsed_args.end_date)
+    pull_space_counts(parsed_args.token, spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.time_segment_label)
 
     # populate and save CSV data
     # write_detailed_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag)
