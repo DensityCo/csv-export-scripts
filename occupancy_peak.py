@@ -23,7 +23,7 @@ def auth_header(token):
     return {'Authorization': f'Bearer {token}'}
 
 
-def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', paginate_next=None, order='ASC', time_segment_label='Office Hours'):
+def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', paginate_next=None, order='ASC', time_segment_labels='Office Hours'):
     """Convenience method to hit the space events endpoint. Will act recursively if
     data is paginated.
 
@@ -35,6 +35,7 @@ def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', p
         start_time: UTC datetime for beginning of query
         end_time: UTC datetime for end of query
         paginate_next: URL for next pagination (will override setting initial params in request)
+        time_segment_labels: Label for your time segment—the hours of the day and days of the week you're scoping your data to
 
     Returns:
         [{...}] Counts array
@@ -45,7 +46,7 @@ def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', p
         params = {
             'start_time': start_time.isoformat(),
             'end_time': end_time.isoformat(),
-            'time_segment_label': time_segment_label,
+            'time_segment_labels': time_segment_labels,
             'order': 'ASC',
             'interval': interval,
             'page_size': 5000,
