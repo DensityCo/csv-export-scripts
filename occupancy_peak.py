@@ -23,7 +23,7 @@ def auth_header(token):
     return {'Authorization': f'Bearer {token}'}
 
 
-def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', paginate_next=None, order='ASC', time_segment_label=None):
+def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', paginate_next=None, order='ASC', time_segment_label='Office Hours'):
     """Convenience method to hit the space events endpoint. Will act recursively if
     data is paginated.
 
@@ -35,7 +35,6 @@ def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', p
         start_time: UTC datetime for beginning of query
         end_time: UTC datetime for end of query
         paginate_next: URL for next pagination (will override setting initial params in request)
-        time_segment_label: Label for scoping data to a times of day and days of week
 
     Returns:
         [{...}] Counts array
@@ -209,7 +208,7 @@ def split_time_range_into_subranges_with_same_offset(time_zone, start, end, para
     # Return array of subranges
     return results
 
-def pull_counts_for_time_ranges(token, space_id, time_ranges, time_segment_label):
+def pull_counts_for_time_ranges(token, space_id, time_ranges):
     """Pulls count buckets from the density API given a space and set of DST safe
     time ranges.
     """
@@ -219,10 +218,9 @@ def pull_counts_for_time_ranges(token, space_id, time_ranges, time_segment_label
         counts = get_counts(
             token,
             space_id,
-            time_segment_label,
             start_time=subrange['start'],
             end_time=subrange['end'],
-            interval='1d',
+            interval='1d'
         )
 
         if subrange['gap'] and len(counts) > 0:
@@ -257,7 +255,7 @@ def calculate_monthly_peaks(counts, time_zone):
     return peaks
 
 
-def pull_space_counts(token, spaces, start, end, time_segment_label):
+def pull_space_counts(token, spaces, start, end):
     """Pull and store count buckets on the space dict"""
     for space in spaces:
         space_id = space['id']
@@ -281,8 +279,8 @@ def pull_space_counts(token, spaces, start, end, time_segment_label):
             params={'interval': '1d'}
         )
 
-        print(f'Pulling counts for space: {space_name} from {start} to {end} during {time_segment_label}')
-        counts = pull_counts_for_time_ranges(token, space_id, time_ranges, time_segment_label)
+        print(f'Pulling counts for space: {space_name} from {start} to {end}')
+        counts = pull_counts_for_time_ranges(token, space_id, time_ranges)
 
         space['counts'] = counts
 
@@ -453,7 +451,7 @@ def create_csv(parsed_args):
     spaces = pull_spaces(parsed_args.token, tag=parsed_args.tag)
 
     # pull the counts for the time range, and attach them to the space objects
-    pull_space_counts(parsed_args.token, spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.time_segment_label)
+    pull_space_counts(parsed_args.token, spaces, parsed_args.start_date, parsed_args.end_date)
 
     # populate and save CSV data
     # write_detailed_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag)
