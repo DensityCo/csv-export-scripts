@@ -31,5 +31,5 @@ optional arguments:
 
 #### Example
 ```bash
-./density_peaks.py -s=2019-01-01 -e=2019-01-08 -p=DAILY -t=tok_123123123123123 --tag=conference_room
+./occupancy_peak.py -s=2019-10-01 -e=2019-10-24 -p=DAILY -t=tok_123123123123123 --tag=conference_room
 ```

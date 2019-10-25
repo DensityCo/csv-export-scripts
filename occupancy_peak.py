@@ -5,10 +5,12 @@ import csv
 from datetime import datetime, timedelta
 import itertools
 import sys
+import statistics
 
 from dateutil import parser, tz
 import pytz
 import requests
+import json
 
 
 API_ROOT = 'https://api.density.io/v2'
@@ -58,6 +60,7 @@ def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', p
             params=params,
             headers=auth_header(token)
         )
+
     request.raise_for_status()
 
     response = request.json()
@@ -285,22 +288,57 @@ def pull_space_counts(token, spaces, start, end):
         counts = pull_counts_for_time_ranges(token, space_id, time_ranges)
 
         space['counts'] = counts
-        print(space['counts'])
 
 
-def summarize_count_data(counts):
+def summarize_count_data(space):
     """Given a set of count buckets and a local time zone, create summary data"""
     peaks = []
+    normalized_peaks = []
     space_summary = {
         'peak': 0,
-        'avg_peak': 0
+        'peak_mean': 0,
+        'peak_mean_normalized': 0,
+        'stdev': 0,
+        'opp_peak': 0,
+        'opp_peak_mean': 0,
+        'opp_peak_mean_normalized': 0,
     }
 
-    for count in counts:
+    # Add all of the peak counts for the time range to a peaks list
+    for count in space['counts']:
         peaks.append(count['interval']['analytics']['max'])
 
-    space_summary['peak'] = max(peaks)
-    space_summary['avg_peak'] = round(sum(peaks) / len(peaks))
+    # Pull out the max peak, mean peak, and calculate the stdev
+    peak = max(peaks)
+    peak_mean = statistics.mean(peaks)
+    peak_stdev = statistics.stdev(peaks)
+
+    # Create a normalized peak list with a removed outliers
+    normalized_peaks = [p for p in peaks if (p > peak_mean - 0.5 * peak_stdev)]
+    normalized_peaks = [p for p in normalized_peaks if (p < peak_mean + 0.5 * peak_stdev)]
+
+    # Provide an average with outliers remove
+    if sum(normalized_peaks) == 0:
+        peak_mean_normalized = 0
+    else:
+        peak_mean_normalized = statistics.mean(normalized_peaks)
+
+    # Calculate the space waste opportunity
+    opp_peak = space['target_capacity'] - peak
+    opp_peak_mean = space['target_capacity'] - peak_mean
+    opp_peak_mean_normalized = space['target_capacity'] - peak_mean_normalized
+
+    # Set the values for this space
+    space_summary['peak'] = peak
+    space_summary['peak_mean'] = round(peak_mean)
+    space_summary['peak_mean_normalized'] = round(peak_mean_normalized)
+    space_summary['stdev'] = peak_stdev
+    space_summary['opp_peak'] = opp_peak
+    space_summary['opp_peak_mean'] = round(opp_peak_mean)
+    space_summary['opp_peak_mean_normalized'] = round(opp_peak_mean_normalized)
+
+    print(space['name'])
+    print(space['sensors_total'])
 
     return space_summary
 
@@ -354,8 +392,8 @@ def write_summary_data_to_csv(spaces, start, end, peak_type, tag):
         end.strftime(OUTPUT_DATE_FORMAT)
     )
 
-    field_names = ['Space', 'Start Date', 'End Date', 'Target Capacity', 'Interval', 'Peak Occupancy', 'Avg Peak Occupancy'] if peak_type == 'DAILY'\
-        else ['Space', 'Start Date', 'End Date', 'Target Capacity', 'Interval', 'Peak Occupancy', 'Avg Peak Occupancy']
+    field_names = ['Space', 'Start Date', 'End Date', 'Target Capacity', 'Interval', 'Peak Occupancy', 'Avg Peak Occupancy', 'Avg Peak Occupancy - Normalized', 'Peak Opportunity', 'Avg Peak Opportunity', 'Avg Peak Opportunity - Normalized'] if peak_type == 'DAILY'\
+        else ['Space', 'Start Date', 'End Date', 'Target Capacity', 'Interval', 'Peak Occupancy', 'Avg Peak Occupancy', 'Avg Peak Occupancy - Normalized', 'Peak Opportunity', 'Avg Peak Opportunity', 'Avg Peak Opportunity - Normalized']
 
     outfile = open(file_name, 'w', newline='')
 
@@ -365,8 +403,7 @@ def write_summary_data_to_csv(spaces, start, end, peak_type, tag):
     for space in spaces:
         time_zone = space['time_zone']
 
-        space_summary = summarize_count_data(space['counts'])
-        print(space_summary)
+        space_summary = summarize_count_data(space)
 
         if peak_type == 'DAILY':
             writer.writerow({
@@ -376,7 +413,11 @@ def write_summary_data_to_csv(spaces, start, end, peak_type, tag):
                 'Target Capacity': space['target_capacity'],
                 'Interval': 'Daily',
                 'Peak Occupancy': space_summary['peak'],
-                'Avg Peak Occupancy': space_summary['avg_peak'],
+                'Avg Peak Occupancy': space_summary['peak_mean'],
+                'Avg Peak Occupancy - Normalized': space_summary['peak_mean_normalized'],
+                'Peak Opportunity': space_summary['opp_peak'],
+                'Avg Peak Opportunity': space_summary['opp_peak_mean'],
+                'Avg Peak Opportunity - Normalized': space_summary['opp_peak_mean_normalized']
             })
         else:
             writer.writerow({
@@ -386,7 +427,11 @@ def write_summary_data_to_csv(spaces, start, end, peak_type, tag):
                 'Target Capacity': space['target_capacity'],
                 'Interval': 'Monthly',
                 'Peak Occupancy': space_summary['peak'],
-                'Avg Peak Occupancy': space_summary['avg_peak'],
+                'Avg Peak Occupancy': space_summary['peak_mean'],
+                'Avg Peak Occupancy - Normalized': space_summary['peak_mean_normalized'],
+                'Peak Opportunity': space_summary['opp_peak'],
+                'Avg Peak Opportunity': space_summary['opp_peak_mean'],
+                'Avg Peak Opportunity - Normalized': space_summary['opp_peak_mean_normalized']
             })
 
     outfile.close()
