@@ -304,29 +304,48 @@ def summarize_count_data(space):
         'opp_peak_mean_normalized': 0,
     }
 
+    peak = 0
+    peak_mean = 0
+    peak_stdev = 0
+    peak_mean_normalized = 0
+    capacity = 0
+    opp_peak = 0
+    opp_peak_mean = 0
+    opp_peak_mean_normalized = 0
+
     # Add all of the peak counts for the time range to a peaks list
     for count in space['counts']:
         peaks.append(count['interval']['analytics']['max'])
 
-    # Pull out the max peak, mean peak, and calculate the stdev
-    peak = max(peaks)
-    peak_mean = statistics.mean(peaks)
-    peak_stdev = statistics.stdev(peaks)
+    if sum(peaks) > 0:
+        # Pull out the max peak, mean peak, and calculate the stdev
+        peak = max(peaks)
+        peak_mean = statistics.mean(peaks)
+        peak_stdev = statistics.stdev(peaks)
 
-    # Create a normalized peak list with a removed outliers
-    normalized_peaks = [p for p in peaks if (p > peak_mean - 0.5 * peak_stdev)]
-    normalized_peaks = [p for p in normalized_peaks if (p < peak_mean + 0.5 * peak_stdev)]
+    if sum(normalized_peaks) > 0:
+        # Create a normalized peak list with a removed outliers
+        normalized_peaks = [p for p in peaks if (p > peak_mean - 0.5 * peak_stdev)]
+        normalized_peaks = [p for p in normalized_peaks if (p < peak_mean + 0.5 * peak_stdev)]
 
-    # Provide an average with outliers remove
-    if sum(normalized_peaks) == 0:
-        peak_mean_normalized = 0
-    else:
+        # Provide an average with outliers remove
         peak_mean_normalized = statistics.mean(normalized_peaks)
 
-    # Calculate the space waste opportunity
-    opp_peak = space['target_capacity'] - peak
-    opp_peak_mean = space['target_capacity'] - peak_mean
-    opp_peak_mean_normalized = space['target_capacity'] - peak_mean_normalized
+    # Set the capacity default to target and backfill with legal
+    if space['target_capacity'] is None:
+        if space['capacity'] is None:
+            capacity = 0
+        else:
+            capacity = space['capacity']
+    else:
+        capacity = space['target_capacity']
+
+    if capacity > 0:
+        # Calculate the space waste opportunity
+        opp_peak = capacity - peak
+        opp_peak_mean = capacity - peak_mean
+        opp_peak_mean_normalized = capacity - peak_mean_normalized
+
 
     # Set the values for this space
     space_summary['peak'] = peak
