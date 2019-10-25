@@ -337,9 +337,6 @@ def summarize_count_data(space):
     space_summary['opp_peak_mean'] = round(opp_peak_mean)
     space_summary['opp_peak_mean_normalized'] = round(opp_peak_mean_normalized)
 
-    print(space['name'])
-    print(space['sensors_total'])
-
     return space_summary
 
 
