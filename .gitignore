@@ -1,6 +1,9 @@
 # all CSV files (generated)
 density*.csv
 
+# all CSV files (generated)
+helpers.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

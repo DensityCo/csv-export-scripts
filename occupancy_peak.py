@@ -25,7 +25,7 @@ def auth_header(token):
     return {'Authorization': f'Bearer {token}'}
 
 
-def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', paginate_next=None, order='ASC', time_segment_labels='Office Hours'):
+def get_counts(token, space_id, start_time=None, end_time=None, interval='1d', paginate_next=None, order='ASC', time_segment_labels=None):
     """Convenience method to hit the space events endpoint. Will act recursively if
     data is paginated.
 
@@ -263,14 +263,15 @@ def calculate_monthly_peaks(counts, time_zone):
 def pull_space_counts(token, spaces, start, end):
     """Pull and store count buckets on the space dict"""
     for space in spaces:
-        space_id = space['id']
+        space_id = space['id']  
         space_name = space['name']
         time_zone = space['time_zone']
         created_at = parser.parse(space['created_at'])
 
         if created_at > end.replace(tzinfo=pytz.utc):
             print(f'Skiping {space_name} because it was created too recently ({created_at})')
-            space['counts'] = []
+            # Return a templated result so we don't break a bunch of shit
+            space['counts'] = [{'timestamp': start.strftime(OUTPUT_DATE_FORMAT), 'count': 0, 'interval': {'start': start.strftime(OUTPUT_DATE_FORMAT), 'end': end.strftime(OUTPUT_DATE_FORMAT), 'analytics': {'min': 0, 'max': 0, 'events': 0, 'entrances': 0, 'exits': 0, 'utilization': 0, 'target_utilization': 0, 'entry_rate': 0, 'exit_rate': 0}}}]
             continue
 
         # The space was created during the requested period
@@ -302,6 +303,7 @@ def summarize_count_data(space):
         'opp_peak': 0,
         'opp_peak_mean': 0,
         'opp_peak_mean_normalized': 0,
+        'cost_per_head': 0,
     }
 
     peak = 0
@@ -317,16 +319,28 @@ def summarize_count_data(space):
     for count in space['counts']:
         peaks.append(count['interval']['analytics']['max'])
 
+    # If there's no count data add a dummy peak of 0
+    if not peaks:
+        peaks = [0]
+
+    
+
     if sum(peaks) > 0:
         # Pull out the max peak, mean peak, and calculate the stdev
         peak = max(peaks)
         peak_mean = statistics.mean(peaks)
         peak_stdev = statistics.stdev(peaks)
 
-    if sum(normalized_peaks) > 0:
+    if sum(peaks) > 0:
         # Create a normalized peak list with a removed outliers
         normalized_peaks = [p for p in peaks if (p > peak_mean - 0.5 * peak_stdev)]
         normalized_peaks = [p for p in normalized_peaks if (p < peak_mean + 0.5 * peak_stdev)]
+
+        # If there's no value, just make it 0
+        if not normalized_peaks:
+            normalized_peaks = [0]
+
+        print(str(space['name']) + " | Peaks: " + str(peaks) + " | Normalized: " + str(normalized_peaks))
 
         # Provide an average with outliers remove
         peak_mean_normalized = statistics.mean(normalized_peaks)
@@ -359,17 +373,19 @@ def summarize_count_data(space):
     return space_summary
 
 
-def write_detailed_data_to_csv(spaces, start, end, peak_type, tag):
+
+
+def write_deatiled_data_to_csv(spaces, start, end, peak_type, tag, time_segment_labels):
     """Given spaces w/ populated counts buckets, generate a CSV file"""
     file_name = 'density_{}_occupancy{}_{}-{}.csv'.format(
         peak_type.lower(),
         f'_{tag}' if len(tag) > 0 else '',
+        f'_{time_segment_labels}' if len(tag) > 0 else '',
         start.strftime(OUTPUT_DATE_FORMAT),
         end.strftime(OUTPUT_DATE_FORMAT)
     )
 
-    field_names = ['Space', 'Date', 'Target Capacity', 'Peak Occupancy'] if peak_type == 'DAILY'\
-        else ['Space', 'Month', 'Target Capacity', 'Peak Occupancy']
+    field_names = ['Space', 'Date', 'Target Capacity', 'Peak Occupancy']
 
     outfile = open(file_name, 'w', newline='')
 
@@ -391,7 +407,7 @@ def write_detailed_data_to_csv(spaces, start, end, peak_type, tag):
             for peak in calculate_monthly_peaks(space['counts'], time_zone):
                 writer.writerow({
                     'Space': space['name'],
-                    'Month': peak['Month'],
+                    'Date': peak['Month'],
                     'Target Capacity': space['target_capacity'],
                     'Peak Occupancy': peak['Peak Count'],
                 })
@@ -399,17 +415,65 @@ def write_detailed_data_to_csv(spaces, start, end, peak_type, tag):
     outfile.close()
 
 
-def write_summary_data_to_csv(spaces, start, end, peak_type, tag):
+def write_summary_data_to_csv(spaces, start, end, peak_type, tag, time_segment_labels):
     """Given spaces w/ populated counts buckets, generate a CSV file"""
     file_name = 'density_{}_occupancy_summary{}_{}-{}.csv'.format(
         peak_type.lower(),
         f'_{tag}' if len(tag) > 0 else '',
+        f'_{time_segment_labels}' if len(tag) > 0 else '',
         start.strftime(OUTPUT_DATE_FORMAT),
         end.strftime(OUTPUT_DATE_FORMAT)
     )
 
-    field_names = ['Space', 'Start Date', 'End Date', 'Target Capacity', 'Interval', 'Peak Occupancy', 'Avg Peak Occupancy', 'Avg Peak Occupancy - Normalized', 'Peak Opportunity', 'Avg Peak Opportunity', 'Avg Peak Opportunity - Normalized'] if peak_type == 'DAILY'\
-        else ['Space', 'Start Date', 'End Date', 'Target Capacity', 'Interval', 'Peak Occupancy', 'Avg Peak Occupancy', 'Avg Peak Occupancy - Normalized', 'Peak Opportunity', 'Avg Peak Opportunity', 'Avg Peak Opportunity - Normalized']
+    field_names = ['Space', 'Start Date', 'End Date', 'Target Capacity', 'Interval', 'Peak Occupancy', 'Avg Peak Occupancy', 'Avg Peak Occupancy - Normalized']
+
+    outfile = open(file_name, 'w', newline='')
+
+    writer = csv.DictWriter(outfile, fieldnames=field_names)
+    writer.writeheader()
+
+    for space in spaces:
+        time_zone = space['time_zone']
+
+        space_summary = summarize_count_data(space)
+
+        if peak_type == 'DAILY':
+            writer.writerow({
+                'Space': space['name'],
+                'Start Date': timestamp_to_local(space['counts'][0]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
+                'End Date': timestamp_to_local(space['counts'][-1]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
+                'Target Capacity': space['target_capacity'],
+                'Interval': 'Daily',
+                'Peak Occupancy': space_summary['peak'],
+                'Avg Peak Occupancy': space_summary['peak_mean'],
+                'Avg Peak Occupancy - Normalized': space_summary['peak_mean_normalized'],
+            })
+        else:
+            writer.writerow({
+                'Space': space['name'],
+                'Start Date': timestamp_to_local(space['counts'][0]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
+                'End Date': timestamp_to_local(space['counts'][-1]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
+                'Target Capacity': space['target_capacity'],
+                'Interval': 'Monthly',
+                'Peak Occupancy': space_summary['peak'],
+                'Avg Peak Occupancy': space_summary['peak_mean'],
+                'Avg Peak Occupancy - Normalized': space_summary['peak_mean_normalized'],
+            })
+
+    outfile.close()
+
+
+def write_opportunity_data_to_csv(spaces, start, end, peak_type, tag, time_segment_labels):
+    """Given spaces w/ populated counts buckets, generate a CSV file"""
+    file_name = 'density_{}_occupancy_opportunity{}_{}-{}.csv'.format(
+        peak_type.lower(),
+        f'_{tag}' if len(tag) > 0 else '',
+        f'_{time_segment_labels}' if len(tag) > 0 else '',
+        start.strftime(OUTPUT_DATE_FORMAT),
+        end.strftime(OUTPUT_DATE_FORMAT)
+    )
+
+    field_names = ['Space', 'Start Date', 'End Date', 'Target Capacity', 'Interval', 'Peak Occupancy', 'Avg Peak Occupancy', 'Avg Peak Occupancy - Normalized', 'Peak Opportunity', 'Avg Peak Opportunity', 'Avg Peak Opportunity - Normalized']
 
     outfile = open(file_name, 'w', newline='')
 
@@ -465,7 +529,7 @@ def parse_args():
         '-e', '--end-date',
         type=parser.parse,
         required=True,
-        help='End date (local) of peaks query. Format: YYYY-MM-DD'        
+        help='End date (local) of peaks query. Format: YYYY-MM-DD'
     )
     arg_parser.add_argument(
         '-t', '--token',
@@ -486,10 +550,20 @@ def parse_args():
         help='Filter Density spaces by tag name'
     )
     arg_parser.add_argument(
-        '--time_segment_label',
+        '-ts', '--time-segment-labels',
         type=str,
         default='',
         help='Filter count data by a time segement label'
+    )
+    arg_parser.add_argument(
+        '--peak-summary',
+        action='store_true',
+        help='Produce a summary report with Peak Count for each space over the selected time period'
+    )
+    arg_parser.add_argument(
+        '--peak-opportunity',
+        action='store_true',
+        help='Produce a summary report with advanced Peak Count metrics for each space over the selected time period'
     )
 
     args = arg_parser.parse_args()
@@ -514,12 +588,20 @@ def create_csv(parsed_args):
     # pull the list of spaces, optionally filtering by tag
     spaces = pull_spaces(parsed_args.token, tag=parsed_args.tag)
 
+
     # pull the counts for the time range, and attach them to the space objects
     pull_space_counts(parsed_args.token, spaces, parsed_args.start_date, parsed_args.end_date)
 
     # populate and save CSV data
-    write_detailed_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag)
-    write_summary_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag)
+    write_deatiled_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag, parsed_args.time_segment_labels)
+
+    if parsed_args.peak_summary:
+        write_summary_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag, parsed_args.time_segment_labels)
+    
+    if parsed_args.peak_opportunity:
+        write_opportunity_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag, parsed_args.time_segment_labels)
+        
+    
 
 
 if __name__ == '__main__':
