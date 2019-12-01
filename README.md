@@ -45,16 +45,11 @@ schedule_peak.py [-h] -s START_DATE -e END_DATE -t TOKEN -sch SCHEDULE -sid SPAC
 
 optional arguments:
   -h, --help            show this help message and exit
-  -s START_DATE, --start-date START_DATE
-                        Start date (local) of peaks query: YYYY-MM-DD
-  -e END_DATE, --end-date END_DATE
-                        End date (local) of peaks query. Format: YYYY-MM-DD
-  -t TOKEN, --token TOKEN
-                        Density API token (read-only preferred)
-  -sch SCHEDULE, --schedule SCHEDULE
-                        Path to the schedule csv file
-  -sid SPACE_ID, --space-id SPACE_ID
-                        Space ID to pull data from
+  -s START_DATE, --start-date START_DATE _Start date (local) of peaks query: YYYY-MM-DD_
+  -e END_DATE, --end-date END_DATE _End date (local) of peaks query. Format: YYYY-MM-DD_
+  -t TOKEN, --token TOKEN _Density API token (read-only preferred)_
+  -sch SCHEDULE, --schedule SCHEDULE _Path to the schedule csv file_
+  -sid SPACE_ID, --space-id SPACE_ID _Space ID to pull data from_
 ```
 
 The schedule (`-sch --schedule`) should be a path to a CSV file with weekly schedule information. It should contain this structure:
