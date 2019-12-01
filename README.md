@@ -19,16 +19,12 @@ density_peaks.py [-h] -s START_DATE -e END_DATE -t TOKEN [-i INTERVAL]
                         [--tag TAG]
 
 optional arguments:
-  -h, --help            show this help message and exit
-  -s START_DATE, --start-date START_DATE
-                        Start date (local) of peaks query: YYYY-MM-DD
-  -e END_DATE, --end-date END_DATE
-                        End date (local) of peaks query. Format: YYYY-MM-DD
-  -t TOKEN, --token TOKEN
-                        Density API token (read-only preferred)
-  -p INTERVAL, --peak-type INTERVAL
-                        Peak type (DAILY or MONTHLY)
-  --tag TAG             Filter Density spaces by tag name
+  -h, --help ...show this help message and exit
+  -s START_DATE, --start-date START_DATE ...Start date (local) of peaks query: YYYY-MM-DD
+  -e END_DATE, --end-date END_DATE ...End date (local) of peaks query. Format: YYYY-MM-DD
+  -t TOKEN, --token TOKEN ...Density API token (read-only preferred)
+  -p INTERVAL, --peak-type INTERVAL ...Peak type (DAILY or MONTHLY)
+  --tag TAG ...Filter Density spaces by tag name
 ```
 
 #### Example
@@ -44,12 +40,12 @@ Calculates and writes occupancy peaks for a supplied weekly schedule, from a giv
 schedule_peak.py [-h] -s START_DATE -e END_DATE -t TOKEN -sch SCHEDULE -sid SPACE_ID
 
 optional arguments:
-  -h, --help            show this help message and exit
-  -s START_DATE, --start-date START_DATE _Start date (local) of peaks query: YYYY-MM-DD_
-  -e END_DATE, --end-date END_DATE _End date (local) of peaks query. Format: YYYY-MM-DD_
-  -t TOKEN, --token TOKEN _Density API token (read-only preferred)_
-  -sch SCHEDULE, --schedule SCHEDULE _Path to the schedule csv file_
-  -sid SPACE_ID, --space-id SPACE_ID _Space ID to pull data from_
+  -h, --help ...show this help message and exit
+  -s START_DATE, --start-date START ...DATE _Start date (local) of peaks query: YYYY-MM-DD
+  -e END_DATE, --end-date END_DATE ...End date (local) of peaks query. Format: YYYY-MM-DD
+  -t TOKEN, --token TOKEN ...Density API token (read-only preferred)
+  -sch SCHEDULE, --schedule ...SCHEDULE _Path to the schedule csv file
+  -sid SPACE_ID, --space-id ...SPACE_ID _Space ID to pull data from
 ```
 
 The schedule (`-sch --schedule`) should be a path to a CSV file with weekly schedule information. It should contain this structure:
