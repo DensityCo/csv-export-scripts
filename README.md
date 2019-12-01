@@ -15,8 +15,7 @@ pip install -r requirements.txt
 ## Occupancy Peaks
 #### Usage
 ```bash
-density_peaks.py [-h] -s START_DATE -e END_DATE -t TOKEN [-i INTERVAL]
-                        [--tag TAG]
+density_peaks.py [-h] -s START_DATE -e END_DATE -t TOKEN [-i INTERVAL] [--tag TAG]
 
 optional arguments:
   -h, --help ...show this help message and exit
