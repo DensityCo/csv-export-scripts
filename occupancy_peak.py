@@ -375,10 +375,10 @@ def summarize_count_data(space):
 
 
 
-def write_deatiled_data_to_csv(spaces, start, end, peak_type, tag, time_segment_labels):
+def write_deatiled_data_to_csv(spaces, start, end, interval, tag, time_segment_labels):
     """Given spaces w/ populated counts buckets, generate a CSV file"""
     file_name = 'density_{}_occupancy{}_{}-{}.csv'.format(
-        peak_type.lower(),
+        interval.lower(),
         f'_{tag}' if len(tag) > 0 else '',
         f'_{time_segment_labels}' if len(tag) > 0 else '',
         start.strftime(OUTPUT_DATE_FORMAT),
@@ -395,7 +395,7 @@ def write_deatiled_data_to_csv(spaces, start, end, peak_type, tag, time_segment_
     for space in spaces:
         time_zone = space['time_zone']
 
-        if peak_type == 'DAILY':
+        if interval == 'DAILY':
             for count in space['counts']:
                 writer.writerow({
                     'Space': space['name'],
@@ -415,10 +415,10 @@ def write_deatiled_data_to_csv(spaces, start, end, peak_type, tag, time_segment_
     outfile.close()
 
 
-def write_summary_data_to_csv(spaces, start, end, peak_type, tag, time_segment_labels):
+def write_summary_data_to_csv(spaces, start, end, interval, tag, time_segment_labels):
     """Given spaces w/ populated counts buckets, generate a CSV file"""
     file_name = 'density_{}_occupancy_summary{}_{}-{}.csv'.format(
-        peak_type.lower(),
+        interval.lower(),
         f'_{tag}' if len(tag) > 0 else '',
         f'_{time_segment_labels}' if len(tag) > 0 else '',
         start.strftime(OUTPUT_DATE_FORMAT),
@@ -437,7 +437,7 @@ def write_summary_data_to_csv(spaces, start, end, peak_type, tag, time_segment_l
 
         space_summary = summarize_count_data(space)
 
-        if peak_type == 'DAILY':
+        if interval == 'DAILY':
             writer.writerow({
                 'Space': space['name'],
                 'Start Date': timestamp_to_local(space['counts'][0]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
@@ -463,10 +463,10 @@ def write_summary_data_to_csv(spaces, start, end, peak_type, tag, time_segment_l
     outfile.close()
 
 
-def write_opportunity_data_to_csv(spaces, start, end, peak_type, tag, time_segment_labels):
+def write_opportunity_data_to_csv(spaces, start, end, interval, tag, time_segment_labels):
     """Given spaces w/ populated counts buckets, generate a CSV file"""
     file_name = 'density_{}_occupancy_opportunity{}_{}-{}.csv'.format(
-        peak_type.lower(),
+        interval.lower(),
         f'_{tag}' if len(tag) > 0 else '',
         f'_{time_segment_labels}' if len(tag) > 0 else '',
         start.strftime(OUTPUT_DATE_FORMAT),
@@ -485,7 +485,7 @@ def write_opportunity_data_to_csv(spaces, start, end, peak_type, tag, time_segme
 
         space_summary = summarize_count_data(space)
 
-        if peak_type == 'DAILY':
+        if interval == 'DAILY':
             writer.writerow({
                 'Space': space['name'],
                 'Start Date': timestamp_to_local(space['counts'][0]['timestamp'], time_zone).strftime(OUTPUT_DATE_FORMAT),
@@ -538,10 +538,10 @@ def parse_args():
         help='Density API token (read-only preferred)'
     )
     arg_parser.add_argument(
-        '-p', '--peak-type',
+        '-i', '--interval',
         type=str,
         default='DAILY',
-        help='Peak type (DAILY or MONTHLY)'
+        help='Interval (DAILY or MONTHLY)'
     )
     arg_parser.add_argument(
         '--tag',
@@ -575,10 +575,10 @@ def parse_args():
     if args.start_date >= args.end_date:
         raise ValueError('Start date must be before end date!')
 
-    if args.peak_type not in ['DAILY', 'MONTHLY']:
+    if args.interval not in ['DAILY', 'MONTHLY']:
         raise ValueError('Peak type must be DAILY or MONTHLY')
 
-    if args.peak_type == 'MONTHLY' and \
+    if args.interval == 'MONTHLY' and \
         (args.end_date - args.start_date < timedelta(days=28)):
         print('==! Warning: You are querying under a month of data while using the MONTHLY peak type! ==\n\n')
 
@@ -593,13 +593,13 @@ def create_csv(parsed_args):
     pull_space_counts(parsed_args.token, spaces, parsed_args.start_date, parsed_args.end_date)
 
     # populate and save CSV data
-    write_deatiled_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag, parsed_args.time_segment_labels)
+    write_deatiled_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.interval, parsed_args.tag, parsed_args.time_segment_labels)
 
     if parsed_args.peak_summary:
-        write_summary_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag, parsed_args.time_segment_labels)
+        write_summary_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.interval, parsed_args.tag, parsed_args.time_segment_labels)
     
     if parsed_args.peak_opportunity:
-        write_opportunity_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.peak_type, parsed_args.tag, parsed_args.time_segment_labels)
+        write_opportunity_data_to_csv(spaces, parsed_args.start_date, parsed_args.end_date, parsed_args.interval, parsed_args.tag, parsed_args.time_segment_labels)
         
     
 
